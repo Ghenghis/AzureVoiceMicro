@@ -57,6 +57,65 @@ class AzureTtsService {
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;');
 
+  /// Returns a proper WAV file (RIFF header + 16 kHz 16-bit mono PCM).
+  /// Use for Suno "Upload Audio" — saves directly to a .wav file.
+  Future<Uint8List> synthesizeWav(String text, AzureVoice voice) async {
+    if (text.trim().isEmpty) return Uint8List(0);
+
+    final ssml = '''<speak version="1.0" xml:lang="${voice.locale}">
+  <voice name="${voice.id}">${_escapeXml(text)}</voice>
+</speak>''';
+
+    final url = Uri.parse(
+      'https://$region.tts.speech.microsoft.com/cognitiveservices/v1',
+    );
+
+    final response = await http.post(
+      url,
+      headers: {
+        'Ocp-Apim-Subscription-Key': subscriptionKey,
+        'Content-Type': 'application/ssml+xml',
+        'X-Microsoft-OutputFormat': 'riff-16khz-16bit-mono-pcm',
+        'User-Agent': 'AzureVoiceMicro/1.0',
+      },
+      body: ssml,
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Azure TTS WAV error ${response.statusCode}: ${response.body}');
+    }
+    return response.bodyBytes;
+  }
+
+  /// Returns raw 16 kHz 16-bit mono PCM bytes — for WebRTC call injection.
+  Future<Uint8List> synthesizePcm(String text, AzureVoice voice) async {
+    if (text.trim().isEmpty) return Uint8List(0);
+
+    final ssml = '''<speak version="1.0" xml:lang="${voice.locale}">
+  <voice name="${voice.id}">${_escapeXml(text)}</voice>
+</speak>''';
+
+    final url = Uri.parse(
+      'https://$region.tts.speech.microsoft.com/cognitiveservices/v1',
+    );
+
+    final response = await http.post(
+      url,
+      headers: {
+        'Ocp-Apim-Subscription-Key': subscriptionKey,
+        'Content-Type': 'application/ssml+xml',
+        'X-Microsoft-OutputFormat': 'raw-16khz-16bit-mono-pcm',
+        'User-Agent': 'AzureVoiceMicro/1.0',
+      },
+      body: ssml,
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Azure TTS PCM error ${response.statusCode}: ${response.body}');
+    }
+    return response.bodyBytes;
+  }
+
   Future<List<AzureVoice>> fetchVoiceList() async {
     final url = Uri.parse(
       'https://$region.tts.speech.microsoft.com/cognitiveservices/voices/list',

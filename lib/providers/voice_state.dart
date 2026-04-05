@@ -3,17 +3,24 @@ import '../models/azure_voice.dart';
 import '../services/azure_tts_service.dart';
 import '../services/mic_service.dart';
 import '../services/credential_service.dart';
+import '../services/call_service.dart';
 
 class VoiceState extends ChangeNotifier {
   final MicService _mic = MicService();
   final CredentialService _creds = CredentialService();
+  final CallService _call = CallService();
   AzureTtsService? ttsService;
 
   AzureVoice selectedVoice = azureEnglishVoices.first;
+  List<AzureVoice> voiceList = azureEnglishVoices;
+  bool voiceListLoading = false;
+  List<String> favoriteVoiceIds = [];
+  String? defaultVoiceId;
   String transcript = '';
   String interimText = '';
   bool isListening = false;
   bool isSpeaking = false;
+  bool isInCall = false;
   bool isReady = false;
   String? error;
 
@@ -30,7 +37,10 @@ class VoiceState extends ChangeNotifier {
       region: creds.region,
     );
 
-    final voiceId = await _creds.loadSelectedVoice();
+    favoriteVoiceIds = await _creds.loadFavoriteVoices();
+    defaultVoiceId   = await _creds.loadDefaultVoice();
+
+    final voiceId = defaultVoiceId ?? await _creds.loadSelectedVoice();
     if (voiceId != null) {
       selectedVoice = azureEnglishVoices.firstWhere(
         (v) => v.id == voiceId,
@@ -48,6 +58,7 @@ class VoiceState extends ChangeNotifier {
     isReady = true;
     error = null;
     notifyListeners();
+    _fetchVoiceList();
     await startListening();
   }
 
@@ -57,7 +68,30 @@ class VoiceState extends ChangeNotifier {
     isReady = true;
     error = null;
     notifyListeners();
+    _fetchVoiceList();
     if (!isListening) await startListening();
+  }
+
+  Future<void> _fetchVoiceList() async {
+    if (ttsService == null) return;
+    voiceListLoading = true;
+    notifyListeners();
+    try {
+      final fetched = await ttsService!.fetchVoiceList();
+      if (fetched.isNotEmpty) {
+        voiceList = fetched;
+        final match = fetched.firstWhere(
+          (v) => v.id == selectedVoice.id,
+          orElse: () => fetched.first,
+        );
+        selectedVoice = match;
+      }
+    } catch (_) {
+      // keep static fallback list
+    } finally {
+      voiceListLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> startListening() async {
@@ -83,7 +117,15 @@ class VoiceState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await ttsService!.speak(text, selectedVoice);
+      if (isInCall) {
+        // Call mode: synthesize PCM and inject into audio path
+        final pcm = await ttsService!.synthesizePcm(text, selectedVoice);
+        await _call.injectAudio(pcm);
+        // Also play locally so the user can monitor the output
+        await ttsService!.speak(text, selectedVoice);
+      } else {
+        await ttsService!.speak(text, selectedVoice);
+      }
     } catch (e) {
       error = 'TTS error: $e';
       notifyListeners();
@@ -95,9 +137,46 @@ class VoiceState extends ChangeNotifier {
     if (isListening) await startListening();
   }
 
+  Future<void> toggleCall() async {
+    if (isInCall) {
+      await _call.endCall();
+      isInCall = false;
+    } else {
+      try {
+        await _call.startCall();
+        isInCall = true;
+      } catch (e) {
+        error = 'Call error: $e';
+      }
+    }
+    notifyListeners();
+  }
+
   Future<void> selectVoice(AzureVoice voice) async {
     selectedVoice = voice;
     await _creds.saveSelectedVoice(voice.id);
+    notifyListeners();
+  }
+
+  Future<void> toggleFavorite(String voiceId) async {
+    await _creds.toggleFavorite(voiceId);
+    favoriteVoiceIds = await _creds.loadFavoriteVoices();
+    notifyListeners();
+  }
+
+  bool isFavorite(String voiceId) => favoriteVoiceIds.contains(voiceId);
+
+  Future<void> setDefaultVoice(AzureVoice voice) async {
+    defaultVoiceId = voice.id;
+    await _creds.saveDefaultVoice(voice.id);
+    selectedVoice = voice;
+    await _creds.saveSelectedVoice(voice.id);
+    notifyListeners();
+  }
+
+  Future<void> clearDefaultVoice() async {
+    defaultVoiceId = null;
+    await _creds.clearDefaultVoice();
     notifyListeners();
   }
 
@@ -120,5 +199,12 @@ class VoiceState extends ChangeNotifier {
   void clearError() {
     error = null;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _call.dispose();
+    ttsService?.dispose();
+    super.dispose();
   }
 }

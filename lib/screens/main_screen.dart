@@ -5,6 +5,7 @@ import '../widgets/mic_indicator.dart';
 import '../widgets/transcript_display.dart';
 import 'voice_picker_screen.dart';
 import 'settings_screen.dart';
+import 'suno_export_screen.dart';
 
 class MainScreen extends StatelessWidget {
   const MainScreen({super.key});
@@ -23,6 +24,14 @@ class MainScreen extends StatelessWidget {
               tooltip: 'Clear transcript',
               onPressed: state.clearTranscript,
             ),
+          IconButton(
+            icon: const Icon(Icons.music_note),
+            tooltip: 'Export voice for Suno',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SunoExportScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () => Navigator.push(
@@ -87,9 +96,62 @@ class MainScreen extends StatelessWidget {
 
           const Spacer(),
 
+          _CallRow(state: state),
+          const SizedBox(height: 12),
           _VoiceRow(state: state),
           const SizedBox(height: 24),
         ],
+      ),
+    );
+  }
+}
+
+class _CallRow extends StatelessWidget {
+  final VoiceState state;
+  const _CallRow({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final active = state.isInCall;
+    final color = active ? Colors.red : theme.colorScheme.primary;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.4)),
+        ),
+        child: ListTile(
+          leading: Icon(
+            active ? Icons.call_end : Icons.call,
+            color: color,
+          ),
+          title: Text(
+            active ? 'Call Active — AI voice injecting' : 'Call Mode',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+          subtitle: Text(
+            active
+                ? 'TTS is being injected into audio path'
+                : 'Tap to activate voice-changer call mode',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withOpacity(0.55),
+            ),
+          ),
+          trailing: Switch(
+            value: active,
+            activeColor: color,
+            onChanged: state.isReady ? (_) => state.toggleCall() : null,
+          ),
+          onTap: state.isReady ? state.toggleCall : null,
+        ),
       ),
     );
   }
