@@ -1,0 +1,43 @@
+name: azure_voice_micro
+description: Azure AI Voice - speak and hear yourself as any Azure neural voice
+version: 1.0.0+1
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.16.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  provider: ^6.1.1
+
+  # Microphone / STT
+  speech_to_text: ^6.6.0
+
+  # HTTP for Azure TTS REST calls
+  http: ^1.2.0
+
+  # Audio playback
+  just_audio: ^0.9.36
+
+  # Secure credential storage
+  flutter_secure_storage: ^9.0.0
+
+  # Permissions
+  permission_handler: ^11.3.0
+
+  # Environment / config
+  flutter_dotenv: ^5.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
